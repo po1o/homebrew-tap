@@ -19,6 +19,6 @@ The formula selects the matching release asset for the current platform:
 ## Usage
 
 ```bash
-brew tap po1o/homebrew
+brew tap po1o/tap
 brew install prompto
 ```

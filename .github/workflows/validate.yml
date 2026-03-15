@@ -27,8 +27,19 @@ jobs:
       - name: Check out tap repository
         uses: actions/checkout@v5
 
+      - name: Detect whether prompto has a released formula
+        id: formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eq '^  version "' Formula/prompto.rb; then
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Homebrew on Linux
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.formula.outputs.stable == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -41,6 +52,7 @@ jobs:
           echo '/home/linuxbrew/.linuxbrew/sbin' >> "$GITHUB_PATH"
 
       - name: Show Homebrew version
+        if: steps.formula.outputs.stable == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -50,6 +62,7 @@ jobs:
           brew --version
 
       - name: Tap the checked out repository
+        if: steps.formula.outputs.stable == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -60,6 +73,7 @@ jobs:
           brew tap po1o/homebrew "$GITHUB_WORKSPACE"
 
       - name: Install prompto from the tap formula
+        if: steps.formula.outputs.stable == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -69,6 +83,7 @@ jobs:
           brew install po1o/homebrew/prompto
 
       - name: Verify installed prompto
+        if: steps.formula.outputs.stable == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -77,3 +92,9 @@ jobs:
           fi
           prompto version
           brew test prompto
+
+      - name: Skip install validation until the first release
+        if: steps.formula.outputs.stable != 'true'
+        shell: bash
+        run: |
+          echo "prompto has no published release yet; skipping install validation."

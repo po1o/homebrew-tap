@@ -10,8 +10,6 @@ REPO = 'prompto'
 HOMEPAGE = "https://github.com/#{OWNER}/#{REPO}"
 LICENSE = 'MIT'
 FORMULA_PATH = File.expand_path('../Formula/prompto.rb', __dir__)
-PROTOC_GEN_GO_VERSION = 'v1.36.11'
-PROTOC_GEN_GO_GRPC_VERSION = 'v1.6.1'
 
 Asset = Struct.new(:url, :sha256, keyword_init: true)
 ReleaseAssets = Struct.new(:version, :darwin_amd64, :darwin_arm64, :linux_amd64, :linux_arm64, keyword_init: true)
@@ -91,43 +89,36 @@ end
 
 
 def render_formula(release)
-  version_line = release ? "  version \"#{release.version}\"\n" : ''
-  platform_urls = render_platform_urls(release)
-  platform_urls = "#{platform_urls}\n\n" unless platform_urls.empty?
+  return render_placeholder_formula unless release
 
   <<~RUBY
     class Prompto < Formula
       desc "Prompt renderer with streaming daemon support"
       homepage "#{HOMEPAGE}"
       license "#{LICENSE}"
-#{version_line}      head "#{HOMEPAGE}.git", branch: "main"
+      version "#{release.version}"
 
-#{platform_urls}      depends_on "go" => :build if build.head?
-      depends_on "protobuf" => :build if build.head?
+      on_macos do
+        if Hardware::CPU.arm?
+          url "#{release.darwin_arm64.url}"
+          sha256 "#{release.darwin_arm64.sha256}"
+        else
+          url "#{release.darwin_amd64.url}"
+          sha256 "#{release.darwin_amd64.sha256}"
+        end
+      end
+
+      on_linux do
+        if Hardware::CPU.arm?
+          url "#{release.linux_arm64.url}"
+          sha256 "#{release.linux_arm64.sha256}"
+        else
+          url "#{release.linux_amd64.url}"
+          sha256 "#{release.linux_amd64.sha256}"
+        end
+      end
 
       def install
-        if build.head?
-          ENV["CGO_ENABLED"] = "0"
-          ENV["GOEXPERIMENT"] = "greenteagc,jsonv2"
-          gobin = buildpath/"bin"
-          ENV["GOBIN"] = gobin
-          ENV.prepend_path "PATH", gobin
-
-          system "go", "install", "google.golang.org/protobuf/cmd/protoc-gen-go@#{PROTOC_GEN_GO_VERSION}"
-          system "go", "install", "google.golang.org/grpc/cmd/protoc-gen-go-grpc@#{PROTOC_GEN_GO_GRPC_VERSION}"
-
-          cd "src" do
-            system "go", "generate", "./..."
-
-            ldflags = %W[
-              -s -w
-              -X github.com/#{OWNER}/#{REPO}/src/build.Version=0.0.0-dev
-            ]
-            system "go", "build", *std_go_args(output: bin/"prompto", ldflags: ldflags), "."
-          end
-          return
-        end
-
         binary_name = if OS.mac?
           Hardware::CPU.arm? ? "prompto-darwin-arm64" : "prompto-darwin-amd64"
         else
@@ -145,28 +136,16 @@ def render_formula(release)
   RUBY
 end
 
-
-def render_platform_urls(release)
-  return '' unless release
-
+def render_placeholder_formula
   <<~RUBY
-    on_macos do
-      if Hardware::CPU.arm?
-        url "#{release.darwin_arm64.url}"
-        sha256 "#{release.darwin_arm64.sha256}"
-      else
-        url "#{release.darwin_amd64.url}"
-        sha256 "#{release.darwin_amd64.sha256}"
-      end
-    end
+    class Prompto < Formula
+      desc "Prompt renderer with streaming daemon support"
+      homepage "#{HOMEPAGE}"
+      license "#{LICENSE}"
+      disable! date: "#{Time.now.utc.strftime('%Y-%m-%d')}", because: "prompto does not have a published GitHub release yet"
 
-    on_linux do
-      if Hardware::CPU.arm?
-        url "#{release.linux_arm64.url}"
-        sha256 "#{release.linux_arm64.sha256}"
-      else
-        url "#{release.linux_amd64.url}"
-        sha256 "#{release.linux_amd64.sha256}"
+      def install
+        odie "prompto does not have a published GitHub release yet"
       end
     end
   RUBY

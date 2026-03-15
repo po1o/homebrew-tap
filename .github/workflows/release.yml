@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the leading v. Leave empty to regenerate the head-only formula.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tap repository
+        uses: actions/checkout@v5
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+
+      - name: Regenerate prompto formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby scripts/update-prompto-formula.rb "${{ inputs.version }}"
+          ruby -c Formula/prompto.rb
+
+      - name: Commit and push formula update
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Formula/prompto.rb; then
+            echo "formula unchanged"
+            exit 0
+          fi
+
+          version="${{ inputs.version }}"
+          if [[ -n "$version" ]]; then
+            message="prompto ${version}"
+          else
+            message="prompto head"
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Formula/prompto.rb
+          git commit -m "$message"
+          git push

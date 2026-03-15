@@ -1,0 +1,79 @@
+name: Validate Formula
+
+on:
+  push:
+    paths:
+      - 'Formula/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'Formula/**'
+      - 'scripts/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  install:
+    name: validate-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - name: Check out tap repository
+        uses: actions/checkout@v5
+
+      - name: Install Homebrew on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v brew >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo '/home/linuxbrew/.linuxbrew/bin' >> "$GITHUB_PATH"
+          echo '/home/linuxbrew/.linuxbrew/sbin' >> "$GITHUB_PATH"
+
+      - name: Show Homebrew version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == 'Linux' ]]; then
+            eval "$('/home/linuxbrew/.linuxbrew/bin/brew' shellenv)"
+          fi
+          brew --version
+
+      - name: Tap the checked out repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == 'Linux' ]]; then
+            eval "$('/home/linuxbrew/.linuxbrew/bin/brew' shellenv)"
+          fi
+          brew untap po1o/homebrew >/dev/null 2>&1 || true
+          brew tap po1o/homebrew "$GITHUB_WORKSPACE"
+
+      - name: Install prompto from the tap formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == 'Linux' ]]; then
+            eval "$('/home/linuxbrew/.linuxbrew/bin/brew' shellenv)"
+          fi
+          brew install po1o/homebrew/prompto
+
+      - name: Verify installed prompto
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == 'Linux' ]]; then
+            eval "$('/home/linuxbrew/.linuxbrew/bin/brew' shellenv)"
+          fi
+          prompto version
+          brew test prompto

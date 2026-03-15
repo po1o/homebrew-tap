@@ -15,39 +15,39 @@ Asset = Struct.new(:url, :sha256, keyword_init: true)
 ReleaseAssets = Struct.new(:version, :darwin_amd64, :darwin_arm64, :linux_amd64, :linux_arm64, keyword_init: true)
 
 
-def fetch_json(url)
+def fetch_response(url, accept:, limit: 5)
+  raise "too many redirects fetching #{url}" if limit <= 0
+
   uri = URI(url)
   request = Net::HTTP::Get.new(uri)
-  request['Accept'] = 'application/vnd.github+json'
+  request['Accept'] = accept
   request['User-Agent'] = 'po1o-homebrew-formula-updater'
 
   response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') do |http|
     http.request(request)
   end
 
-  unless response.is_a?(Net::HTTPSuccess)
+  case response
+  when Net::HTTPSuccess
+    response
+  when Net::HTTPRedirection
+    location = response['location']
+    raise "redirect without location for #{url}" if location.nil? || location.empty?
+
+    fetch_response(URI.join(url, location).to_s, accept: accept, limit: limit - 1)
+  else
     raise "request failed for #{url}: #{response.code} #{response.message}\n#{response.body}"
   end
+end
 
-  JSON.parse(response.body)
+
+def fetch_json(url)
+  JSON.parse(fetch_response(url, accept: 'application/vnd.github+json').body)
 end
 
 
 def fetch_text(url)
-  uri = URI(url)
-  request = Net::HTTP::Get.new(uri)
-  request['Accept'] = 'application/octet-stream'
-  request['User-Agent'] = 'po1o-homebrew-formula-updater'
-
-  response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == 'https') do |http|
-    http.request(request)
-  end
-
-  unless response.is_a?(Net::HTTPSuccess)
-    raise "request failed for #{url}: #{response.code} #{response.message}\n#{response.body}"
-  end
-
-  response.body
+  fetch_response(url, accept: 'application/octet-stream').body
 end
 
 
